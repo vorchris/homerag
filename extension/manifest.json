@@ -1,0 +1,40 @@
+{
+  "manifest_version": 3,
+  "name": "HomeRAG",
+  "version": "1.0.0",
+  "description": "Inject your personal knowledge into any LLM",
+  "permissions": ["storage", "activeTab", "scripting"],
+  "host_permissions": [
+    "https://chatgpt.com/*",
+    "https://claude.ai/*",
+    "https://gemini.google.com/*",
+    "http://localhost:8000/*",
+    "http://homerag.local/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_popup": "popup/popup.html"
+  },
+  "content_scripts": [
+  {
+    "matches": ["https://chatgpt.com/*"],
+    "js": ["content/sites/chatgpt.js"],
+    "run_at": "document_idle",
+    "all_frames": false
+  },
+  {
+    "matches": ["https://claude.ai/*"],
+    "js": ["content/sites/claude.js"],
+    "run_at": "document_idle",
+    "all_frames": false
+  },
+  {
+    "matches": ["https://gemini.google.com/*"],
+    "js": ["content/sites/gemini.js"],
+    "run_at": "document_idle",
+    "all_frames": false
+  }
+]
+}
