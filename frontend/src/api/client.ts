@@ -6,8 +6,10 @@ export const api = axios.create({ baseURL: BASE, withCredentials: true })
 
 export const getHealth = () => api.get('/health')
 export const getCollections = () => api.get('/collections')
-export const createCollection = (name: string, description = '') =>
-  api.post(`/collections?name=${encodeURIComponent(name)}&description=${encodeURIComponent(description)}`)
+export const createCollection = (name: string, description = '', embedding_provider = 'local', embedding_model = '') =>
+  api.post('/collections', { name, description, embedding_provider, embedding_model })
+export const reembedCollection = (name: string) =>
+  api.post(`/collections/${encodeURIComponent(name)}/reembed`)
 
 export const uploadFile = (file: File, collection: string) => {
   const form = new FormData()
@@ -29,4 +31,4 @@ export const deleteFile = (id: string) =>
   api.delete(`/files/${id}`)
 
 export const getConfig = () => api.get('/config')
-export const updateConfig = (data: Record<string, string>) => api.put('/config', data)
+export const updateConfig = (data: Record<string, string | number>) => api.put('/config', data)

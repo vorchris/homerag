@@ -1,4 +1,5 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
+import { getConfig, updateConfig } from '../api/client'
 
 const S: Record<string, React.CSSProperties> = {
   page: { padding: '40px 48px', maxWidth: 700 },
@@ -15,6 +16,12 @@ const S: Record<string, React.CSSProperties> = {
   },
   divider: { borderTop: '1px solid var(--border)', marginBottom: 36 },
   saved: { fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--accent)', marginLeft: 12 },
+  error: { fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--danger)', marginLeft: 12 },
+  warning: {
+    marginTop: 10, padding: '8px 12px', borderRadius: 'var(--radius)',
+    border: '1px solid #7a5c00', background: '#1a1400',
+    fontFamily: 'var(--font-mono)', fontSize: 11, color: '#f5c400', lineHeight: 1.5,
+  },
 }
 
 export default function Settings() {
@@ -24,11 +31,40 @@ export default function Settings() {
   const [chunkSize, setChunkSize] = useState('512')
   const [overlap, setOverlap] = useState('64')
   const [authToken, setAuthToken] = useState('')
+  const [savedProvider, setSavedProvider] = useState('local')
   const [saved, setSaved] = useState(false)
+  const [error, setError] = useState('')
 
-  const save = () => {
-    setSaved(true)
-    setTimeout(() => setSaved(false), 2000)
+  useEffect(() => {
+    getConfig().then(r => {
+      const d = r.data
+      setEmbProvider(d.embedding_provider ?? 'local')
+      setSavedProvider(d.embedding_provider ?? 'local')
+      setEmbModel(d.embedding_model ?? 'all-MiniLM-L6-v2')
+      setApiKey(d.embedding_api_key ?? '')
+      setChunkSize(String(d.chunk_size ?? 512))
+      setOverlap(String(d.chunk_overlap ?? 64))
+      setAuthToken(d.api_token ?? '')
+    }).catch(() => {})
+  }, [])
+
+  const save = async () => {
+    setError('')
+    try {
+      await updateConfig({
+        embedding_provider: embProvider,
+        embedding_model: embModel,
+        embedding_api_key: apiKey,
+        chunk_size: chunkSize,
+        chunk_overlap: overlap,
+        api_token: authToken,
+      })
+      setSavedProvider(embProvider)
+      setSaved(true)
+      setTimeout(() => setSaved(false), 2000)
+    } catch (e: any) {
+      setError(e?.response?.data?.detail ?? 'Save failed')
+    }
   }
 
   return (
@@ -44,17 +80,27 @@ export default function Settings() {
           <select value={embProvider} onChange={e => setEmbProvider(e.target.value)}>
             <option value="local">local (sentence-transformers)</option>
             <option value="openai">openai</option>
-            <option value="cohere">cohere</option>
           </select>
         </div>
         <div style={S.row}>
           <span style={S.label}>model</span>
-          <input value={embModel} onChange={e => setEmbModel(e.target.value)} placeholder="all-MiniLM-L6-v2" />
+          <input
+            value={embModel}
+            onChange={e => setEmbModel(e.target.value)}
+            placeholder={embProvider === 'openai' ? 'text-embedding-3-small' : 'all-MiniLM-L6-v2'}
+          />
         </div>
         {embProvider !== 'local' && (
           <div style={S.row}>
             <span style={S.label}>api key</span>
             <input type="password" value={apiKey} onChange={e => setApiKey(e.target.value)} placeholder="sk-..." />
+          </div>
+        )}
+        {embProvider !== savedProvider && (
+          <div style={S.warning}>
+            ⚠ Changing the embedding model only affects new collections.<br />
+            Existing collections keep their locked model. To switch an existing collection,
+            delete all its files and re-upload them.
           </div>
         )}
       </div>
@@ -87,6 +133,7 @@ export default function Settings() {
 
       <button style={S.btn} onClick={save}>save</button>
       {saved && <span style={S.saved}>saved.</span>}
+      {error && <span style={S.error}>{error}</span>}
     </div>
   )
 }

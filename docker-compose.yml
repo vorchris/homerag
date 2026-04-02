@@ -23,6 +23,7 @@ services:
       - QDRANT_PORT=6333
       - DB_PATH=/app/data/homerag.db
       - STORAGE_PATH=/app/storage
+      - HOMERAG_CONFIG=/app/data/homerag_config.json
     depends_on:
       - qdrant
     restart: unless-stopped

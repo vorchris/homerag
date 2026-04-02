@@ -1,5 +1,5 @@
 from qdrant_client import QdrantClient
-from qdrant_client.models import Distance, VectorParams, PointStruct
+from qdrant_client.models import Distance, VectorParams, PointStruct, PointIdsList
 from app.config import settings
 import uuid
 
@@ -13,11 +13,20 @@ def get_client() -> QdrantClient:
 
 def ensure_collection(name: str, dim: int):
     c = get_client()
-    existing = [col.name for col in c.get_collections().collections]
+    existing = {col.name for col in c.get_collections().collections}
     if name not in existing:
         c.create_collection(
             collection_name=name,
             vectors_config=VectorParams(size=dim, distance=Distance.COSINE)
+        )
+        return
+    # Check dimension matches
+    info = c.get_collection(name)
+    existing_dim = info.config.params.vectors.size
+    if existing_dim != dim:
+        raise ValueError(
+            f"Collection '{name}' has dimension {existing_dim} but current embedding model "
+            f"produces {dim} dimensions. Delete the collection and re-ingest all documents."
         )
 
 def upsert(collection: str, texts: list[str], vectors: list[list[float]], payloads: list[dict]) -> list[str]:
@@ -29,6 +38,10 @@ def upsert(collection: str, texts: list[str], vectors: list[list[float]], payloa
     ]
     c.upsert(collection_name=collection, points=points)
     return ids
+
+def delete_points(collection: str, ids: list[str]):
+    c = get_client()
+    c.delete(collection_name=collection, points_selector=PointIdsList(points=ids))
 
 def search(collection: str, vector: list[float], top_k: int = 5) -> list[dict]:
     c = get_client()

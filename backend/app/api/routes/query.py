@@ -1,8 +1,11 @@
 from fastapi import APIRouter, HTTPException, Depends, Request
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel
-from app.core.embedding.factory import get_embedding_provider
+from app.core.embedding.factory import get_embedding_provider, get_provider_for
 from app.core import vector_store
+from app.db.session import get_db
+from app.db.repository import CollectionRepo
+from sqlalchemy.orm import Session
 
 import hmac
 import json
@@ -45,8 +48,16 @@ class QueryRequest(BaseModel):
 
 
 @router.post("/query", dependencies=[Depends(verify_auth)])
-async def query(req: QueryRequest):
-    embedder = get_embedding_provider()
+async def query(req: QueryRequest, db: Session = Depends(get_db)):
+    # Use the embedding model locked to this collection
+    col = CollectionRepo(db).get_by_name(req.collection)
+    if col and col.embedding_provider:
+        cfg = json.loads(CONFIG_PATH.read_text()) if CONFIG_PATH.exists() else {}
+        api_key = cfg.get("embedding", {}).get("api_key")
+        embedder = get_provider_for(col.embedding_provider, col.embedding_model, api_key)
+    else:
+        embedder = get_embedding_provider()
+
     vector = embedder.embed([req.query])[0]
     results = vector_store.search(req.collection, vector, req.top_k)
     context = "\n---\n".join(r["text"] for r in results)

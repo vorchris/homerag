@@ -12,6 +12,9 @@ class Collection(Base):
     name = Column(String, unique=True, nullable=False)
     description = Column(String, default="")
     created_at = Column(DateTime, default=datetime.utcnow)
+    embedding_provider = Column(String, nullable=True)
+    embedding_model = Column(String, nullable=True)
+    embedding_dim = Column(Integer, nullable=True)
 
 class Document(Base):
     __tablename__ = "documents"

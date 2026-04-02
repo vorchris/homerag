@@ -18,6 +18,19 @@ class CollectionRepo:
     def get_by_name(self, name: str) -> Collection | None:
         return self.db.query(Collection).filter(Collection.name == name).first()
 
+    def get_or_create(self, name: str) -> Collection:
+        col = self.get_by_name(name)
+        if not col:
+            col = self.create(name=name)
+        return col
+
+    def set_embedding(self, name: str, provider: str, model: str, dim: int | None):
+        update = {"embedding_provider": provider, "embedding_model": model}
+        if dim is not None:
+            update["embedding_dim"] = dim
+        self.db.query(Collection).filter(Collection.name == name).update(update)
+        self.db.commit()
+
     def delete(self, id: str):
         self.db.query(Collection).filter(Collection.id == id).delete()
         self.db.commit()

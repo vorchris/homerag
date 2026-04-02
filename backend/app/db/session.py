@@ -1,4 +1,4 @@
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
 from app.db.models import Base
 from app.config import settings
@@ -20,6 +20,18 @@ SessionLocal = sessionmaker(
 
 def init_db():
     Base.metadata.create_all(bind=engine)
+    # Add new columns to existing DBs without Alembic
+    with engine.connect() as conn:
+        for col, typ in [
+            ("embedding_provider", "VARCHAR"),
+            ("embedding_model", "VARCHAR"),
+            ("embedding_dim", "INTEGER"),
+        ]:
+            try:
+                conn.execute(text(f"ALTER TABLE collections ADD COLUMN {col} {typ}"))
+                conn.commit()
+            except Exception:
+                pass  # Column already exists
 
 def get_db():
     db = SessionLocal()
