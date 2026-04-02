@@ -2,7 +2,7 @@ import axios from 'axios'
 
 const BASE = import.meta.env.VITE_API_URL ?? '/api'
 
-export const api = axios.create({ baseURL: BASE })
+export const api = axios.create({ baseURL: BASE, withCredentials: true })
 
 export const getHealth = () => api.get('/health')
 export const getCollections = () => api.get('/collections')

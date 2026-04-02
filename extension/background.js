@@ -4,6 +4,7 @@ const DEFAULT_SETTINGS = {
   collection: 'default',
   topK: 3,
   threshold: 0.5,
+  apiToken: '',
 }
 
 chrome.runtime.onInstalled.addListener(() => {
@@ -19,26 +20,38 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         sendResponse({ context: null, chunks: [] })
         return
       }
+
+      if (!settings.apiToken) {
+        console.warn('HomeRAG: no API token set')
+        sendResponse({ context: null, chunks: [], error: 'no_token' })
+        return
+      }
+
       try {
         const res = await fetch(`${settings.apiUrl}/api/query`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${settings.apiToken}`,
+          },
           body: JSON.stringify({
             query: msg.query,
             collection: settings.collection,
             top_k: settings.topK,
           }),
         })
+
+        if (res.status === 401) {
+          console.error('HomeRAG: invalid API token')
+          sendResponse({ context: null, chunks: [], error: 'unauthorized' })
+          return
+        }
+
         const data = await res.json()
         const chunks = data.chunks ?? []
-
-        // Filter by threshold
         const filtered = chunks.filter(c => c.score >= settings.threshold)
 
-        sendResponse({
-          context: data.context,
-          chunks: filtered        
-        })
+        sendResponse({ context: data.context, chunks: filtered })
       } catch (e) {
         console.error('HomeRAG background error:', e)
         sendResponse({ context: null, chunks: [] })

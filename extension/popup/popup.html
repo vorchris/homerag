@@ -5,45 +5,89 @@
   <link rel="stylesheet" href="popup.css">
 </head>
 <body>
+
   <div class="header">
-    <div class="logo-small">home</div>
-    <div class="logo">RAG</div>
+    <div class="brand">
+      <span class="brand-home">home</span><span class="brand-rag">RAG</span>
+    </div>
     <div class="status">
       <span id="dot" class="dot"></span>
       <span id="status-text">checking</span>
     </div>
   </div>
 
-  <div class="row">
-    <span class="label">enabled</span>
-    <label class="toggle">
-      <input type="checkbox" id="enabled">
-      <span class="slider"></span>
-    </label>
+  <div class="tabs">
+    <button class="tab active" data-tab="main">main</button>
+    <button class="tab" data-tab="settings">settings</button>
   </div>
 
-  <div class="row">
-    <span class="label">collection</span>
-    <select id="collection"></select>
+  <!-- MAIN TAB -->
+  <div id="tab-main" class="tab-content active">
+
+    <div class="enable-row">
+      <div class="enable-info">
+        <div class="enable-label">enabled</div>
+        <div class="enable-sub">inject context into prompts</div>
+      </div>
+      <label class="toggle-big">
+        <input type="checkbox" id="enabled">
+        <span class="slider-big"></span>
+      </label>
+    </div>
+
+    <div class="field">
+      <div class="field-label">collection</div>
+      <select id="collection" class="input-full"></select>
+    </div>
+
+    <div class="field">
+      <div class="field-label">
+        threshold
+        <span class="field-value" id="threshold-display">0.50</span>
+      </div>
+      <input type="range" id="threshold" min="0" max="1" step="0.05" value="0.5" class="slider-range">
+      <div class="range-labels">
+        <span>0</span><span>0.5</span><span>1</span>
+      </div>
+    </div>
+
+    <button class="btn-save" id="save-main">save</button>
+    <div id="saved-msg-main" class="saved-msg"></div>
   </div>
 
-  <div class="row">
-    <span class="label">top-k</span>
-    <input type="number" id="topK" min="1" max="10" value="3">
-  </div>
+  <!-- SETTINGS TAB -->
+  <div id="tab-settings" class="tab-content">
 
-  <div class="row">
-    <span class="label">threshold</span>
-    <input type="number" id="threshold" min="0" max="1" step="0.05" value="0.5">
-  </div>
+    <div class="field">
+      <div class="field-label">api url</div>
+      <input type="text" id="apiUrl" class="input-full" placeholder="http://localhost:8000">
+    </div>
 
-  <div class="row">
-    <span class="label">api url</span>
-    <input type="text" id="apiUrl" placeholder="http://localhost:8000">
-  </div>
+    <div class="field">
+      <div class="field-label">api token</div>
+      <div class="token-row">
+        <input type="password" id="apiToken" class="input-full" placeholder="your token">
+        <button class="btn-eye" id="toggle-token" title="show/hide">
+          <svg id="eye-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>
+          </svg>
+        </button>
+      </div>
+    </div>
 
-  <button id="save">save</button>
-  <div id="saved-msg" class="saved-msg"></div>
+    <div class="field">
+      <div class="field-label">top-k results</div>
+      <div class="topk-row">
+        <button class="btn-step" id="topk-down">−</button>
+        <span id="topk-display" class="topk-value">3</span>
+        <button class="btn-step" id="topk-up">+</button>
+        <input type="hidden" id="topK" value="3">
+      </div>
+    </div>
+
+    <button class="btn-save" id="save-settings">save</button>
+    <div id="saved-msg-settings" class="saved-msg"></div>
+  </div>
 
   <script src="popup.js"></script>
 </body>
