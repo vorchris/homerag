@@ -2,17 +2,15 @@
   let suggestions = []
   let selected = new Set()
   let barEl = null
-  let spacerEl = null
   let lastQuery = ''
   let injecting = false
   let debounceTimer = null
+  let pendingBadge = null // { files: ['file1.txt', ...] }
 
-  // ─── Extension valid check ────────────────────────────────
   function isExtensionValid() {
     try { return !!chrome.runtime?.id } catch { return false }
   }
 
-  // ─── RAG ─────────────────────────────────────────────────
   async function fetchSuggestions(query) {
     if (!isExtensionValid()) return []
     return new Promise((resolve) => {
@@ -25,7 +23,6 @@
     })
   }
 
-  // ─── Helpers ─────────────────────────────────────────────
   function groupByFile(chunks) {
     const map = new Map()
     chunks.forEach((chunk) => {
@@ -39,15 +36,20 @@
   }
 
   function getSendButton() {
-    return document.querySelector('button[aria-label="Send Message"]') ||
-           document.querySelector('button[data-testid="send-button"]') ||
-           document.querySelector('button[type="submit"]')
+    return (
+      document.querySelector('button[aria-label="Send Message"]') ||
+      document.querySelector('button[aria-label="Send message"]') ||
+      document.querySelector('button[data-testid="send-button"]') ||
+      [...document.querySelectorAll('button[type="button"]')].findLast(
+        b => b.querySelector('svg') && !b.disabled
+      )
+    )
   }
 
   function getVisiblePromptEl() {
-    // Claude uses a ProseMirror editor
     const candidates = [
       ...document.querySelectorAll('div.ProseMirror[contenteditable="true"]'),
+      ...document.querySelectorAll('div[contenteditable="true"][data-placeholder]'),
       ...document.querySelectorAll('div[contenteditable="true"]'),
     ]
     return candidates.find(el => {
@@ -66,15 +68,8 @@
     const el = getVisiblePromptEl()
     if (!el) return false
     el.focus()
-    // ProseMirror: use execCommand to properly trigger React/ProseMirror state update
     document.execCommand('selectAll', false, null)
     document.execCommand('insertText', false, value)
-    if (!el.textContent.includes(value)) {
-      // Fallback
-      el.innerHTML = ''
-      el.textContent = value
-      el.dispatchEvent(new InputEvent('input', { bubbles: true, cancelable: true }))
-    }
     return true
   }
 
@@ -84,156 +79,68 @@
     const style = document.createElement('style')
     style.id = 'homerag-styles'
     style.textContent = `
-      #homerag-spacer {
-        width: 100%;
-        transition: height 0.2s ease;
-        height: 0px;
-      }
       #homerag-bar {
-        width: 100%;
-        background: #111;
-        border-top: 1px solid #1e1e1e;
-        border-bottom: 1px solid #1e1e1e;
-        padding: 6px 12px;
-        display: none;
-        flex-direction: column;
-        gap: 0;
-        font-family: 'DM Mono', monospace, sans-serif;
-        font-size: 11px;
-        box-sizing: border-box;
+        position: fixed; left: 0; right: 0; z-index: 99999;
+        background: #111; border-top: 1px solid #1e1e1e; border-bottom: 1px solid #1e1e1e;
+        padding: 6px 12px; display: none; flex-direction: column; gap: 0;
+        font-family: 'DM Mono', monospace; font-size: 11px; box-sizing: border-box;
       }
       #homerag-bar.visible { display: flex; }
-      .homerag-header {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        margin-bottom: 6px;
-      }
-      .homerag-label {
-        color: #444;
-        font-size: 9px;
-        letter-spacing: 1.5px;
-        text-transform: uppercase;
-      }
-      .homerag-actions {
-        display: flex;
-        gap: 10px;
-        align-items: center;
-      }
-      .homerag-action-btn {
-        color: #444;
-        cursor: pointer;
-        font-size: 9px;
-        letter-spacing: 1px;
-        text-transform: uppercase;
-        background: none;
-        border: none;
-        padding: 0;
-        font-family: inherit;
-        transition: color 0.1s;
-      }
+      .homerag-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
+      .homerag-label { color: #444; font-size: 9px; letter-spacing: 1.5px; text-transform: uppercase; }
+      .homerag-actions { display: flex; gap: 10px; align-items: center; }
+      .homerag-action-btn { color: #444; cursor: pointer; font-size: 9px; letter-spacing: 1px; text-transform: uppercase; background: none; border: none; padding: 0; font-family: inherit; transition: color 0.1s; }
       .homerag-action-btn:hover { color: #888; }
-      .homerag-close-btn {
-        color: #333;
-        cursor: pointer;
-        font-size: 16px;
-        line-height: 1;
-        margin-left: 6px;
-        transition: color 0.1s;
-      }
+      .homerag-close-btn { color: #333; cursor: pointer; font-size: 16px; line-height: 1; margin-left: 6px; transition: color 0.1s; }
       .homerag-close-btn:hover { color: #666; }
-      .homerag-files {
-        display: flex;
-        flex-direction: row;
-        gap: 6px;
-        flex-wrap: wrap;
-      }
-      .homerag-file-chip {
-        display: flex;
-        align-items: center;
-        gap: 6px;
-        padding: 4px 10px;
-        border-radius: 20px;
-        cursor: pointer;
-        border: 1px solid #222;
-        background: transparent;
-        transition: all 0.1s;
-        max-width: 220px;
-        white-space: nowrap;
-        overflow: hidden;
-      }
+      .homerag-files { display: flex; flex-direction: row; gap: 6px; flex-wrap: wrap; }
+      .homerag-file-chip { display: flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 20px; cursor: pointer; border: 1px solid #222; background: transparent; transition: all 0.1s; max-width: 220px; white-space: nowrap; overflow: hidden; }
       .homerag-file-chip:hover { border-color: #333; background: #1a1a1a; }
       .homerag-file-chip.selected { border-color: #00e5b0; background: #0a1f19; }
-      .homerag-chip-dot {
-        width: 6px; height: 6px;
-        border-radius: 50%;
-        background: #333;
-        flex-shrink: 0;
-        transition: background 0.1s;
-      }
+      .homerag-chip-dot { width: 6px; height: 6px; border-radius: 50%; background: #333; flex-shrink: 0; transition: background 0.1s; }
       .homerag-file-chip.selected .homerag-chip-dot { background: #00e5b0; }
-      .homerag-chip-name {
-        color: #888;
-        font-size: 11px;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        transition: color 0.1s;
-      }
+      .homerag-chip-name { color: #888; font-size: 11px; overflow: hidden; text-overflow: ellipsis; transition: color 0.1s; }
       .homerag-file-chip.selected .homerag-chip-name { color: #ccc; }
-      .homerag-chip-score {
-        color: #333;
-        font-size: 9px;
-        flex-shrink: 0;
-        transition: color 0.1s;
-      }
+      .homerag-chip-score { color: #333; font-size: 9px; flex-shrink: 0; transition: color 0.1s; }
       .homerag-file-chip.selected .homerag-chip-score { color: #00e5b0; }
+      .homerag-msg-badge { display: flex; gap: 4px; flex-wrap: wrap; margin-bottom: 5px; }
+      .homerag-msg-chip { font-family: 'DM Mono', monospace; font-size: 9px; color: #00e5b0; background: #0a1f19; border: 1px solid rgba(0,229,176,0.25); border-radius: 10px; padding: 2px 7px; letter-spacing: 0.4px; white-space: nowrap; }
     `
     document.head.appendChild(style)
   }
 
-  // ─── Bar ─────────────────────────────────────────────────
-  function findComposerContainer() {
-    const sendBtn = getSendButton()
-    if (!sendBtn) return null
-    let el = sendBtn
-    for (let i = 0; i < 10; i++) {
-      el = el.parentElement
-      if (!el) break
-      if (el.tagName === 'FORM') return el
-    }
-    return sendBtn.closest('form') ?? sendBtn.parentElement ?? null
-  }
-
+  // ─── Bar (position: fixed, anchored just above input) ────
   function ensureBar() {
     if (barEl && document.body.contains(barEl)) return
     injectStyles()
-
-    spacerEl = document.createElement('div')
-    spacerEl.id = 'homerag-spacer'
-
     barEl = document.createElement('div')
     barEl.id = 'homerag-bar'
+    document.body.appendChild(barEl)
+  }
 
-    const composer = findComposerContainer()
-    if (composer && composer.parentElement) {
-      composer.parentElement.insertBefore(spacerEl, composer)
-      composer.parentElement.insertBefore(barEl, composer)
-    } else {
-      document.body.appendChild(spacerEl)
-      document.body.appendChild(barEl)
+  function updateBarPosition() {
+    if (!barEl) return
+    const promptEl = getVisiblePromptEl()
+    if (!promptEl) { barEl.style.bottom = '80px'; barEl.style.top = 'auto'; return }
+    let el = promptEl.parentElement
+    let topY = promptEl.getBoundingClientRect().top
+    for (let i = 0; i < 15 && el && el !== document.body; i++) {
+      const rect = el.getBoundingClientRect()
+      const pos = window.getComputedStyle(el).position
+      if (pos === 'sticky' || pos === 'fixed') { topY = rect.top; break }
+      if (rect.width > window.innerWidth * 0.5 && rect.top > window.innerHeight * 0.4 && rect.top < window.innerHeight * 0.95) {
+        topY = rect.top
+      }
+      el = el.parentElement
     }
+    barEl.style.top = 'auto'
+    barEl.style.bottom = (window.innerHeight - topY) + 'px'
   }
 
   function renderBar() {
     ensureBar()
     const files = groupByFile(suggestions)
-
-    if (files.length === 0) {
-      barEl.classList.remove('visible')
-      if (spacerEl) spacerEl.style.height = '0px'
-      return
-    }
-
+    if (files.length === 0) { barEl.classList.remove('visible'); return }
     barEl.classList.add('visible')
     barEl.innerHTML = `
       <div class="homerag-header">
@@ -254,31 +161,74 @@
         `).join('')}
       </div>
     `
-
-    requestAnimationFrame(() => {
-      if (spacerEl && barEl) spacerEl.style.height = barEl.offsetHeight + 'px'
-    })
-
-    document.getElementById('homerag-close').onclick = () => {
-      suggestions = []; selected.clear(); renderBar()
-    }
-    document.getElementById('homerag-all').onclick = () => {
-      files.forEach((_, i) => selected.add(i)); renderBar()
-    }
-    document.getElementById('homerag-none').onclick = () => {
-      selected.clear(); renderBar()
-    }
+    requestAnimationFrame(updateBarPosition)
+    document.getElementById('homerag-close').onclick = () => { suggestions = []; selected.clear(); renderBar() }
+    document.getElementById('homerag-all').onclick = () => { files.forEach((_, i) => selected.add(i)); renderBar() }
+    document.getElementById('homerag-none').onclick = () => { selected.clear(); renderBar() }
     barEl.querySelectorAll('.homerag-file-chip').forEach(chip => {
       chip.onclick = () => {
         const i = parseInt(chip.dataset.index, 10)
-        if (selected.has(i)) selected.delete(i)
-        else selected.add(i)
+        selected.has(i) ? selected.delete(i) : selected.add(i)
         renderBar()
       }
     })
   }
 
-  // ─── Input Detection ─────────────────────────────────────
+  // ─── Hide context + show badge above message ─────────────
+  function hideContextInMessages() {
+    // Walk all elements, use textContent to find literal <context>…</context> strings
+    // (they're rendered as plain text in user message bubbles, not as HTML elements)
+    const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_ELEMENT)
+    let node
+    const candidates = []
+    while ((node = walker.nextNode())) {
+      if (node.dataset?.homeragCleaned) continue
+      if (node.closest('[contenteditable="true"], textarea')) continue
+      const t = node.textContent || ''
+      if (t.includes('<context>') && t.includes('</context>')) candidates.push(node)
+    }
+    if (!candidates.length) return
+
+    // Pick the deepest (smallest) element per chain — that's the actual text container
+    candidates.sort((a, b) => (a.textContent?.length || 0) - (b.textContent?.length || 0))
+    const done = new Set()
+    for (const el of candidates) {
+      // Skip if an ancestor was already processed
+      let skip = false
+      let p = el.parentElement
+      while (p) { if (done.has(p)) { skip = true; break } p = p.parentElement }
+      if (skip) continue
+
+      el.dataset.homeragCleaned = '1'
+      done.add(el)
+
+      const text = el.textContent || ''
+      const end = text.indexOf('</context>')
+      if (end === -1) continue
+      const realQuestion = text.slice(end + '</context>'.length).replace(/^\s+/, '').trim()
+      if (!realQuestion) continue
+
+      el.innerHTML = ''
+
+      if (pendingBadge?.files?.length) {
+        const badge = document.createElement('div')
+        badge.className = 'homerag-msg-badge'
+        badge.innerHTML = pendingBadge.files.map(f => `<span class="homerag-msg-chip">${f}</span>`).join('')
+        el.appendChild(badge)
+        pendingBadge = null
+      }
+
+      const span = document.createElement('span')
+      span.textContent = realQuestion
+      el.appendChild(span)
+    }
+  }
+
+  const msgObserver = new MutationObserver(() => hideContextInMessages())
+  msgObserver.observe(document.body, { childList: true, subtree: true })
+  hideContextInMessages()
+
+  // ─── Input detection ─────────────────────────────────────
   document.addEventListener('input', () => {
     if (injecting || !isExtensionValid()) return
     clearTimeout(debounceTimer)
@@ -291,7 +241,6 @@
       }
       if (query === lastQuery) return
       lastQuery = query
-
       const chunks = await fetchSuggestions(query)
       suggestions = chunks
       selected = new Set(groupByFile(chunks).map((_, i) => i))
@@ -303,38 +252,32 @@
   document.addEventListener('keydown', async (e) => {
     if (injecting || !isExtensionValid()) return
     if (e.key !== 'Enter' || e.shiftKey) return
-
     const promptEl = getVisiblePromptEl()
     if (!promptEl) return
     if (document.activeElement !== promptEl && !promptEl.contains(document.activeElement)) return
-
     const query = getPromptText()
     if (!query) return
-
     const files = groupByFile(suggestions)
-    const selectedChunks = files
-      .filter((_, i) => selected.has(i))
-      .flatMap(f => f.chunks)
-
+    const selectedChunks = files.filter((_, i) => selected.has(i)).flatMap(f => f.chunks)
     if (selectedChunks.length === 0) return
 
     e.preventDefault()
     e.stopImmediatePropagation()
-
     injecting = true
+
+    // Store badge info before clearing
+    pendingBadge = { files: files.filter((_, i) => selected.has(i)).map(f => f.filename.split('/').pop()) }
 
     const context = selectedChunks.map(c => c.text).join('\n---\n')
     const fullPrompt = `<context>\n${context}\n</context>\n\n${query}`
-
     setPromptText(fullPrompt)
-    await new Promise(r => setTimeout(r, 120))
+    await new Promise(r => setTimeout(r, 150))
 
     const btn = getSendButton()
     if (btn && !btn.disabled) btn.click()
 
     suggestions = []; selected.clear(); lastQuery = ''
     renderBar()
-
     setTimeout(() => { injecting = false }, 300)
   }, true)
 
