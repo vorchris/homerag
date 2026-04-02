@@ -9,7 +9,12 @@ const NAV = [
   { path: '/settings',    label: 'settings' },
 ]
 
-export default function Layout({ children }: { children: React.ReactNode }) {
+interface Props {
+  children: React.ReactNode
+  onLogout?: () => void
+}
+
+export default function Layout({ children, onLogout }: Props) {
   const [online, setOnline] = useState<boolean | null>(null)
 
   useEffect(() => {
@@ -69,6 +74,33 @@ export default function Layout({ children }: { children: React.ReactNode }) {
             {online === null ? 'checking' : online ? 'online' : 'offline'}
           </span>
         </div>
+
+        {/* Logout */}
+        {onLogout && (
+          <button onClick={onLogout} style={{
+            margin: '16px 24px 0',
+            padding: '6px 0',
+            fontFamily: 'var(--font-mono)',
+            fontSize: 11,
+            color: 'var(--text-3)',
+            background: 'transparent',
+            border: '1px solid var(--border)',
+            borderRadius: 'var(--radius)',
+            cursor: 'pointer',
+            transition: 'color 0.15s, border-color 0.15s',
+          }}
+            onMouseEnter={e => {
+              (e.currentTarget as HTMLButtonElement).style.color = 'var(--danger)'
+              ;(e.currentTarget as HTMLButtonElement).style.borderColor = 'var(--danger)'
+            }}
+            onMouseLeave={e => {
+              (e.currentTarget as HTMLButtonElement).style.color = 'var(--text-3)'
+              ;(e.currentTarget as HTMLButtonElement).style.borderColor = 'var(--border)'
+            }}
+          >
+            logout
+          </button>
+        )}
       </aside>
 
       {/* Main */}
