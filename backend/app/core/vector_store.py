@@ -39,6 +39,13 @@ def upsert(collection: str, texts: list[str], vectors: list[list[float]], payloa
     c.upsert(collection_name=collection, points=points)
     return ids
 
+def get_collection_dim(collection: str) -> int | None:
+    try:
+        info = get_client().get_collection(collection)
+        return info.config.params.vectors.size
+    except Exception:
+        return None
+
 def delete_points(collection: str, ids: list[str]):
     c = get_client()
     c.delete(collection_name=collection, points_selector=PointIdsList(points=ids))

@@ -49,14 +49,26 @@ class QueryRequest(BaseModel):
 
 @router.post("/query", dependencies=[Depends(verify_auth)])
 async def query(req: QueryRequest, db: Session = Depends(get_db)):
-    # Use the embedding model locked to this collection
+    cfg = json.loads(CONFIG_PATH.read_text()) if CONFIG_PATH.exists() else {}
+    api_key = cfg.get("embedding", {}).get("api_key")
+
     col = CollectionRepo(db).get_by_name(req.collection)
     if col and col.embedding_provider:
-        cfg = json.loads(CONFIG_PATH.read_text()) if CONFIG_PATH.exists() else {}
-        api_key = cfg.get("embedding", {}).get("api_key")
         embedder = get_provider_for(col.embedding_provider, col.embedding_model, api_key)
     else:
         embedder = get_embedding_provider()
+
+    # Detect dim mismatch against actual Qdrant collection before querying
+    qdrant_dim = vector_store.get_collection_dim(req.collection)
+    if qdrant_dim is not None and embedder.get_dim() != qdrant_dim:
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                f"Dimension mismatch: collection '{req.collection}' has {qdrant_dim}-dim vectors "
+                f"but the current model produces {embedder.get_dim()} dims. "
+                f"Go to Collections and click 're-embed' to fix this."
+            ),
+        )
 
     vector = embedder.embed([req.query])[0]
     results = vector_store.search(req.collection, vector, req.top_k)

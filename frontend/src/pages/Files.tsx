@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { getCollections, uploadFile, getFiles, deleteFile } from '../api/client'
+import { getCollections, uploadFileStream, getFiles, deleteFile } from '../api/client'
 
 const S: Record<string, React.CSSProperties> = {
   page: { padding: '40px 48px', maxWidth: 900 },
@@ -37,6 +37,7 @@ export default function Files() {
   const [selected, setSelected] = useState('default')
   const [files, setFiles] = useState<any[]>([])
   const [loading, setLoading] = useState(false)
+  const [uploadProgress, setUploadProgress] = useState<{ done: number; total: number } | null>(null)
   const [drag, setDrag] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
 
@@ -54,14 +55,16 @@ export default function Files() {
 
   const upload = async (file: File) => {
     setLoading(true)
+    setUploadProgress({ done: 0, total: 0 })
     try {
-      await uploadFile(file, selected)
+      await uploadFileStream(file, selected, (done, total) => setUploadProgress({ done, total }))
       const r = await getFiles(selected)
       setFiles(r.data)
     } catch (e: any) {
-      alert(e?.response?.data?.detail ?? 'Upload fehlgeschlagen')
+      alert(e instanceof Error ? e.message : 'Upload fehlgeschlagen')
     } finally {
       setLoading(false)
+      setUploadProgress(null)
     }
   }
 
@@ -97,9 +100,28 @@ export default function Files() {
         onDragLeave={() => setDrag(false)}
         onDrop={onDrop}
       >
-        {loading ? 'uploading...' : 'drop file here or click to upload'}
-        <br />
-        <span style={{ fontSize: 11, opacity: 0.5 }}>pdf · txt · md · docx</span>
+        {loading && uploadProgress ? (
+          <>
+            <div style={{ marginBottom: 10, fontSize: 12 }}>
+              {uploadProgress.total === 0 ? 'uploading...' : `embedding ${uploadProgress.done} / ${uploadProgress.total} chunks`}
+            </div>
+            <div style={{ width: '100%', background: 'var(--border)', borderRadius: 4, height: 4, overflow: 'hidden' }}>
+              <div style={{
+                height: '100%', borderRadius: 4, background: 'var(--accent)',
+                transition: 'width 0.2s ease',
+                width: uploadProgress.total > 0
+                  ? `${Math.round(uploadProgress.done / uploadProgress.total * 100)}%`
+                  : '8%',
+              }} />
+            </div>
+          </>
+        ) : (
+          <>
+            drop file here or click to upload
+            <br />
+            <span style={{ fontSize: 11, opacity: 0.5 }}>pdf · txt · md · docx</span>
+          </>
+        )}
         <input ref={inputRef} type="file" style={{ display: 'none' }}
           accept=".pdf,.txt,.md,.docx"
           onChange={e => { const f = e.target.files?.[0]; if (f) upload(f) }} />

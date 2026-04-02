@@ -1,4 +1,6 @@
+import json
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from app.db.session import get_db
@@ -36,15 +38,34 @@ def create_collection(req: CreateCollectionRequest, db: Session = Depends(get_db
     return col
 
 
+class ReembedRequest(BaseModel):
+    embedding_provider: str | None = None
+    embedding_model: str | None = None
+
+
 @router.post("/collections/{name}/reembed")
-def reembed_collection(name: str, db: Session = Depends(get_db)):
-    """Re-embed all chunks of a collection using its locked model."""
+def reembed_collection(name: str, req: ReembedRequest = ReembedRequest(), db: Session = Depends(get_db)):
+    """Stream re-embed progress as SSE."""
     from app.core.ingestion.pipeline import IngestionPipeline
-    col = CollectionRepo(db).get_by_name(name)
+    repo = CollectionRepo(db)
+    col = repo.get_by_name(name)
     if not col:
         raise HTTPException(status_code=404, detail="Collection not found.")
-    if not col.embedding_provider:
-        raise HTTPException(status_code=400, detail="No embedding model locked. Upload a file first.")
+
+    if req.embedding_provider or req.embedding_model:
+        provider = req.embedding_provider or col.embedding_provider or "local"
+        model = req.embedding_model or col.embedding_model or PROVIDER_DEFAULTS.get(provider, "")
+        repo.set_embedding(name, provider, model, dim=None)
+        db.refresh(col)
+
+    if not (col.embedding_provider or req.embedding_provider):
+        raise HTTPException(status_code=400, detail="No embedding model set. Upload a file first.")
+
     pipeline = IngestionPipeline()
-    result = pipeline.reembed_collection(name)
-    return result
+
+    def event_stream():
+        for progress in pipeline.reembed_collection_stream(name):
+            yield f"data: {json.dumps(progress)}\n\n"
+        yield "data: {\"done\": true}\n\n"
+
+    return StreamingResponse(event_stream(), media_type="text/event-stream")

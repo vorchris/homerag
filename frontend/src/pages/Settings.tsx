@@ -90,12 +90,10 @@ export default function Settings() {
             placeholder={embProvider === 'openai' ? 'text-embedding-3-small' : 'all-MiniLM-L6-v2'}
           />
         </div>
-        {embProvider !== 'local' && (
-          <div style={S.row}>
-            <span style={S.label}>api key</span>
-            <input type="password" value={apiKey} onChange={e => setApiKey(e.target.value)} placeholder="sk-..." />
-          </div>
-        )}
+        <div style={S.row}>
+          <span style={S.label}>openai api key</span>
+          <input type="password" value={apiKey} onChange={e => setApiKey(e.target.value)} placeholder="sk-..." />
+        </div>
         {embProvider !== savedProvider && (
           <div style={S.warning}>
             ⚠ Changing the embedding model only affects new collections.<br />

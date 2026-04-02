@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { getCollections, createCollection, reembedCollection } from '../api/client'
+import { getCollections, createCollection, reembedCollectionStream } from '../api/client'
 
 const PROVIDER_DEFAULTS: Record<string, string> = {
   local: 'all-MiniLM-L6-v2',
@@ -10,83 +10,102 @@ const S: Record<string, React.CSSProperties> = {
   page: { padding: '40px 48px', maxWidth: 900 },
   h1: { fontSize: 24, fontWeight: 700, letterSpacing: -0.5, marginBottom: 4 },
   sub: { color: 'var(--text-2)', fontFamily: 'var(--font-mono)', fontSize: 12, marginBottom: 32 },
-  form: { display: 'flex', gap: 10, marginBottom: 40, flexWrap: 'wrap' as const, alignItems: 'flex-end' },
-  formGroup: { display: 'flex', flexDirection: 'column' as const, gap: 5 },
-  formLabel: { fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-3)', textTransform: 'uppercase' as const, letterSpacing: 1 },
+  form: { display: 'flex', gap: 10, marginBottom: 40, alignItems: 'center' },
   btn: {
     padding: '8px 18px', borderRadius: 'var(--radius)', fontSize: 13,
     fontFamily: 'var(--font-ui)', fontWeight: 500, background: 'var(--accent)',
-    color: '#000', border: 'none', cursor: 'pointer', flexShrink: 0, height: 36,
+    color: '#000', border: 'none', cursor: 'pointer', flexShrink: 0,
   },
-  btnGhost: {
-    padding: '4px 10px', borderRadius: 'var(--radius)', fontSize: 11,
-    fontFamily: 'var(--font-mono)', cursor: 'pointer',
-    background: 'transparent', color: 'var(--text-3)',
-    border: '1px solid var(--border)', transition: 'all 0.15s',
-  },
-  grid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: 12 },
+  grid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 12 },
   card: {
     border: '1px solid var(--border)', borderRadius: 'var(--radius)',
-    padding: '20px', background: 'var(--bg-2)',
-    transition: 'border-color 0.15s', display: 'flex', flexDirection: 'column' as const, gap: 4,
+    padding: '20px', background: 'var(--bg-2)', transition: 'border-color 0.15s',
   },
-  cardName: { fontWeight: 600, fontSize: 15, marginBottom: 2 },
-  cardDesc: { fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--text-3)' },
-  cardDate: { fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-3)', marginTop: 4 },
-  cardFooter: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 10 },
-  badge: {
-    padding: '2px 8px', borderRadius: 4, background: 'var(--bg-3)',
-    border: '1px solid var(--border)', fontFamily: 'var(--font-mono)',
-    fontSize: 10, color: 'var(--accent)',
+  cardName: { fontWeight: 600, fontSize: 15, marginBottom: 4 },
+  cardDesc: { fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--text-3)', marginBottom: 12 },
+  divider: { borderTop: '1px solid var(--border)', margin: '12px 0' },
+  modelRow: { display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' as const },
+  modelLabel: { fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-3)', letterSpacing: 1, textTransform: 'uppercase' as const, marginRight: 2 },
+  select: { fontSize: 11, padding: '3px 6px', fontFamily: 'var(--font-mono)', background: 'var(--bg-3)', border: '1px solid var(--border)', borderRadius: 4, color: 'var(--text-2)', cursor: 'pointer' },
+  modelInput: { fontSize: 11, padding: '3px 6px', fontFamily: 'var(--font-mono)', background: 'var(--bg-3)', border: '1px solid var(--border)', borderRadius: 4, color: 'var(--text-2)', width: 160 },
+  reembedBtn: {
+    padding: '3px 10px', borderRadius: 4, fontSize: 10,
+    fontFamily: 'var(--font-mono)', cursor: 'pointer',
+    background: 'var(--accent)', color: '#000', border: 'none',
+    letterSpacing: 0.5, transition: 'opacity 0.15s', marginLeft: 'auto',
   },
-  badgeEmpty: {
-    padding: '2px 8px', borderRadius: 4, background: 'var(--bg-3)',
-    border: '1px solid var(--border)', fontFamily: 'var(--font-mono)',
-    fontSize: 10, color: 'var(--text-3)',
-  },
+  progressWrap: { marginTop: 10, background: 'var(--bg-3)', borderRadius: 4, height: 4, overflow: 'hidden' },
+  progressBar: { height: '100%', background: 'var(--accent)', borderRadius: 4, transition: 'width 0.2s ease' },
+  progressLabel: { fontFamily: 'var(--font-mono)', fontSize: 9, color: 'var(--text-3)', marginTop: 4, letterSpacing: 0.5 },
+  cardDate: { fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-3)', marginTop: 8 },
 }
 
 export default function Collections() {
   const [collections, setCollections] = useState<any[]>([])
   const [name, setName] = useState('')
   const [desc, setDesc] = useState('')
-  const [provider, setProvider] = useState('local')
-  const [model, setModel] = useState(PROVIDER_DEFAULTS.local)
   const [loading, setLoading] = useState(false)
+  // per-card model editing state
+  const [cardModels, setCardModels] = useState<Record<string, { provider: string, model: string }>>({})
   const [reembedding, setReembedding] = useState<string | null>(null)
+  const [progress, setProgress] = useState<{ done: number; total: number } | null>(null)
 
-  const load = () => getCollections().then(r => setCollections(r.data)).catch(() => {})
+  const load = async () => {
+    const r = await getCollections().catch(() => ({ data: [] }))
+    setCollections(r.data)
+    const init: Record<string, { provider: string, model: string }> = {}
+    r.data.forEach((c: any) => {
+      init[c.name] = {
+        provider: c.embedding_provider || 'local',
+        model: c.embedding_model || PROVIDER_DEFAULTS.local,
+      }
+    })
+    setCardModels(init)
+  }
 
   useEffect(() => { load() }, [])
-
-  const onProviderChange = (p: string) => {
-    setProvider(p)
-    setModel(PROVIDER_DEFAULTS[p] ?? '')
-  }
 
   const create = async () => {
     if (!name.trim()) return
     setLoading(true)
     try {
-      await createCollection(name.trim(), desc.trim(), provider, model)
+      await createCollection(name.trim(), desc.trim())
       setName(''); setDesc('')
       await load()
-    } finally {
-      setLoading(false)
-    }
+    } finally { setLoading(false) }
   }
 
-  const reembed = async (colName: string) => {
-    if (!confirm(`Re-embed all chunks in "${colName}" with its locked model?\nThis may take a while.`)) return
-    setReembedding(colName)
+  const updateCardModel = (colName: string, field: 'provider' | 'model', value: string) => {
+    setCardModels(prev => {
+      const next = { ...prev[colName], [field]: value }
+      if (field === 'provider') next.model = PROVIDER_DEFAULTS[value] ?? ''
+      return { ...prev, [colName]: next }
+    })
+  }
+
+  const reembed = async (col: any) => {
+    const m = cardModels[col.name]
+    const changed = m.provider !== col.embedding_provider || m.model !== col.embedding_model
+    const msg = changed
+      ? `Switch "${col.name}" to ${m.provider} · ${m.model} and re-embed all chunks?`
+      : `Re-embed all chunks in "${col.name}" with the current model?`
+    if (!confirm(msg)) return
+
+    setReembedding(col.name)
+    setProgress({ done: 0, total: 0 })
     try {
-      const r = await reembedCollection(colName)
-      alert(`Done. Re-embedded ${r.data.reembedded} chunks.`)
+      await reembedCollectionStream(
+        col.name,
+        (done, total) => setProgress({ done, total }),
+        changed ? m.provider : undefined,
+        changed ? m.model : undefined,
+      )
       await load()
     } catch (e: any) {
-      alert(e?.response?.data?.detail ?? 'Re-embed failed')
+      alert(e instanceof Error ? e.message : 'Re-embed failed')
     } finally {
       setReembedding(null)
+      setProgress(null)
     }
   }
 
@@ -96,58 +115,65 @@ export default function Collections() {
       <div style={S.sub}>knowledge bases · namespaces</div>
 
       <div style={S.form}>
-        <div style={S.formGroup}>
-          <span style={S.formLabel}>name</span>
-          <input value={name} onChange={e => setName(e.target.value)} placeholder="my-collection"
-            style={{ width: 180 }} onKeyDown={e => e.key === 'Enter' && create()} />
-        </div>
-        <div style={S.formGroup}>
-          <span style={S.formLabel}>description</span>
-          <input value={desc} onChange={e => setDesc(e.target.value)} placeholder="optional"
-            style={{ width: 160 }} onKeyDown={e => e.key === 'Enter' && create()} />
-        </div>
-        <div style={S.formGroup}>
-          <span style={S.formLabel}>embedding</span>
-          <select value={provider} onChange={e => onProviderChange(e.target.value)} style={{ width: 100 }}>
-            <option value="local">local</option>
-            <option value="openai">openai</option>
-          </select>
-        </div>
-        <div style={S.formGroup}>
-          <span style={S.formLabel}>model</span>
-          <input value={model} onChange={e => setModel(e.target.value)} placeholder="model name"
-            style={{ width: 200 }} />
-        </div>
+        <input value={name} onChange={e => setName(e.target.value)} placeholder="collection name"
+          style={{ maxWidth: 200 }} onKeyDown={e => e.key === 'Enter' && create()} />
+        <input value={desc} onChange={e => setDesc(e.target.value)} placeholder="description (optional)"
+          onKeyDown={e => e.key === 'Enter' && create()} />
         <button style={S.btn} onClick={create} disabled={loading || !name.trim()}>
           {loading ? '...' : 'create'}
         </button>
       </div>
 
       <div style={S.grid}>
-        {collections.map(c => (
-          <div key={c.id} style={S.card}
-            onMouseEnter={e => (e.currentTarget.style.borderColor = 'var(--border-2)')}
-            onMouseLeave={e => (e.currentTarget.style.borderColor = 'var(--border)')}>
-            <div style={S.cardName}>{c.name}</div>
-            <div style={S.cardDesc}>{c.description || 'no description'}</div>
-            <div style={S.cardDate}>{new Date(c.created_at).toLocaleDateString()}</div>
-            <div style={S.cardFooter}>
-              {c.embedding_model
-                ? <span style={S.badge}>{c.embedding_provider} · {c.embedding_model}</span>
-                : <span style={S.badgeEmpty}>no model yet</span>
-              }
-              {c.embedding_model && (
+        {collections.map(c => {
+          const cm = cardModels[c.name] ?? { provider: 'local', model: PROVIDER_DEFAULTS.local }
+          const isDirty = cm.provider !== (c.embedding_provider || 'local') || cm.model !== (c.embedding_model || PROVIDER_DEFAULTS.local)
+          return (
+            <div key={c.id} style={S.card}
+              onMouseEnter={e => (e.currentTarget.style.borderColor = 'var(--border-2)')}
+              onMouseLeave={e => (e.currentTarget.style.borderColor = 'var(--border)')}>
+              <div style={S.cardName}>{c.name}</div>
+              <div style={S.cardDesc}>{c.description || 'no description'}</div>
+
+              <div style={S.divider} />
+
+              <div style={S.modelRow}>
+                <span style={S.modelLabel}>model</span>
+                <select style={S.select} value={cm.provider} onChange={e => updateCardModel(c.name, 'provider', e.target.value)}>
+                  <option value="local">local</option>
+                  <option value="openai">openai</option>
+                </select>
+                <input style={S.modelInput} value={cm.model} onChange={e => updateCardModel(c.name, 'model', e.target.value)} />
                 <button
-                  style={S.btnGhost}
+                  style={{ ...S.reembedBtn, opacity: reembedding === c.name ? 0.5 : 1 }}
                   disabled={reembedding === c.name}
-                  onClick={() => reembed(c.name)}
+                  onClick={() => reembed(c)}
+                  title={isDirty ? 'Switch model & re-embed' : 'Re-embed with current model'}
                 >
-                  {reembedding === c.name ? '...' : 're-embed'}
+                  {reembedding === c.name ? '...' : isDirty ? 'apply' : 're-embed'}
                 </button>
+              </div>
+
+              {reembedding === c.name && progress && (
+                <>
+                  <div style={S.progressWrap}>
+                    <div style={{
+                      ...S.progressBar,
+                      width: progress.total > 0 ? `${Math.round(progress.done / progress.total * 100)}%` : '5%',
+                    }} />
+                  </div>
+                  <div style={S.progressLabel}>
+                    {progress.total > 0
+                      ? `${progress.done} / ${progress.total} chunks`
+                      : 'starting...'}
+                  </div>
+                </>
               )}
+
+              <div style={S.cardDate}>{new Date(c.created_at).toLocaleDateString()}</div>
             </div>
-          </div>
-        ))}
+          )
+        })}
         {collections.length === 0 && (
           <div style={{ color: 'var(--text-3)', fontFamily: 'var(--font-mono)', fontSize: 12 }}>
             no collections yet
