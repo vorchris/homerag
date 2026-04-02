@@ -1,178 +1,150 @@
 # HomeRAG
 
-HomeRAG is a personal Retrieval-Augmented Generation (RAG) system that allows you to inject your own knowledge base into Large Language Models (LLMs) like ChatGPT, Claude, and Gemini. By uploading documents and querying them, you can enhance AI responses with your personal data.
+> Inject your personal knowledge base into ChatGPT, Claude, and Gemini.
 
-## Features
+Upload documents, organize them in collections, and let the browser extension automatically pull relevant context into your prompts — without copy-pasting.
 
-- **Document Upload**: Support for PDF, DOCX, TXT, and web pages
-- **Vector Search**: Powered by Qdrant vector database and sentence transformers
-- **Browser Extension**: Seamlessly integrate with popular LLM chat interfaces
-- **RESTful API**: FastAPI backend for easy integration
-- **Web Interface**: React-based frontend for managing collections and files
-- **Dockerized**: Easy deployment with Docker Compose
+---
 
-## Architecture
+## ✦ Features
 
-- **Backend**: Python/FastAPI with SQLAlchemy for metadata and Qdrant for vector storage
-- **Frontend**: React/TypeScript with Vite for the web interface
-- **Extension**: Chrome/Firefox extension for injecting knowledge into LLM chats
-- **Database**: SQLite for file metadata, Qdrant for embeddings
+- 📄 **Document ingestion** — PDF, DOCX, TXT, MD, CSV and web URLs
+- 🗂 **Collections** — organize documents into namespaces, each with its own embedding model
+- 🧠 **Embedding providers** — local (sentence-transformers) or OpenAI
+- 🔍 **Vector search** — Qdrant for fast similarity search
+- 🧩 **Browser extension** — auto-injects context into ChatGPT, Claude, and Gemini
+- 🖥 **Web interface** — upload, search, manage collections and settings
+- 🔐 **Auth** — session login for the UI, Bearer token for the extension
 
-## Installation Guide
+---
 
-### Prerequisites
-
-- Docker and Docker Compose
-- Git
-
-### Quick Start with Docker Compose
-
-1. **Clone the repository**:
-   ```bash
-   git clone <repository-url>
-   cd homerag
-   ```
-
-2. **Create environment file**:
-   Create a `.env` file in the root directory with necessary environment variables (e.g., API keys if needed).
-
-3. **Build and run the services**:
-   ```bash
-   docker-compose up --build
-   ```
-
-   This will start:
-   - Qdrant vector database on port 6333
-   - Backend API on port 8000
-   - Frontend on port 3000
-
-4. **Access the application**:
-   - Web interface: http://localhost:3000
-   - API documentation: http://localhost:8000/docs
-
-### Manual Installation
-
-#### Backend
-
-1. Navigate to the backend directory:
-   ```bash
-   cd backend
-   ```
-
-2. Create a virtual environment:
-   ```bash
-   python -m venv venv
-   source venv/bin/activate  # On Windows: venv\Scripts\activate
-   ```
-
-3. Install dependencies:
-   ```bash
-   pip install -r requirements.txt
-   ```
-
-4. Set environment variables (create .env file):
-   ```env
-   QDRANT_HOST=localhost
-   QDRANT_PORT=6333
-   DB_PATH=./data/homerag.db
-   STORAGE_PATH=./storage
-   ```
-
-5. Start Qdrant (if not using Docker):
-   ```bash
-   docker run -p 6333:6333 qdrant/qdrant
-   ```
-
-6. Run the backend:
-   ```bash
-   uvicorn app.main:app --reload
-   ```
-
-#### Frontend
-
-1. Navigate to the frontend directory:
-   ```bash
-   cd frontend
-   ```
-
-2. Install dependencies:
-   ```bash
-   npm install
-   ```
-
-3. Start the development server:
-   ```bash
-   npm run dev
-   ```
-
-#### Browser Extension
-
-1. Navigate to the extension directory:
-   ```bash
-   cd extension
-   ```
-
-2. Load the extension in your browser:
-   - **Chrome**: Go to `chrome://extensions/`, enable "Developer mode", click "Load unpacked", and select the extension folder.
-   - **Firefox**: Go to `about:debugging`, click "This Firefox", click "Load Temporary Add-on", and select `manifest.json`.
-
-## Usage
-
-1. **Upload Documents**: Use the web interface to upload PDF, DOCX, TXT files, or provide web URLs.
-
-2. **Create Collections**: Organize your documents into collections for better management.
-
-3. **Query Knowledge**: Ask questions through the web interface or use the API.
-
-4. **Integrate with LLMs**: Install the browser extension and use it on supported LLM websites to inject relevant knowledge into your conversations.
-
-## API Endpoints
-
-- `GET /api/health` - Health check
-- `POST /api/upload` - Upload files
-- `POST /api/query` - Query the knowledge base
-- `GET /api/collections` - List collections
-- `GET /api/files` - List files
-
-For detailed API documentation, visit http://localhost:8000/docs when the backend is running.
-
-## Development
-
-### Running Tests
+## ⚡ Quick Start
 
 ```bash
-# Backend tests
-cd backend
-pytest
-
-# Frontend tests
-cd frontend
-npm test
+git clone <repository-url>
+cd homerag
+docker compose up --build -d
 ```
 
-### Building for Production
+Then open **http://localhost:3000** — the setup wizard walks you through the initial configuration.
+
+| Service | URL |
+|---------|-----|
+| Web interface | http://localhost:3000 |
+| Backend API | http://localhost:8000 |
+| Qdrant dashboard | http://localhost:6333/dashboard |
+
+> Config is stored in the `db_data` Docker volume and survives container restarts.
+
+---
+
+## 🛠 Architecture
+
+```
+browser extension
+      │
+      ▼
+frontend (React)  ──▶  nginx  ──▶  backend (FastAPI)  ──▶  Qdrant
+                                         │
+                                     SQLite (metadata)
+                                     /app/storage (files)
+                                     homerag_config.json
+```
+
+| Layer | Stack |
+|-------|-------|
+| Backend | Python · FastAPI · SQLAlchemy · Qdrant client |
+| Frontend | React · TypeScript · Vite · nginx |
+| Extension | Chrome Manifest V3 |
+| Databases | SQLite (metadata) · Qdrant (vectors) |
+
+---
+
+## 🧩 Browser Extension
+
+**Install:** `chrome://extensions/` → Developer mode → Load unpacked → select `extension/`
+
+The extension watches your input as you type, queries the backend for relevant chunks, and shows them as chips above the send button. On **Enter**, selected chunks are prepended to your prompt as `<context>…</context>` — invisible in the chat history.
+
+**Supported:** `chatgpt.com` · `claude.ai` · `gemini.google.com`
+
+**Popup tabs:**
+
+| Tab | Controls |
+|-----|----------|
+| **main** | Enabled toggle · Collection · Threshold slider |
+| **settings** | API URL · API token · Top-K |
+
+---
+
+## 🗂 Collections & Embedding Models
+
+Each collection has its own **locked embedding model**, so different collections can use different providers side by side.
+
+- The global model in **Settings** is the default for new collections
+- Changing the global model does **not** affect existing collections
+- To switch a collection's model: update the dropdowns on the collection card and click **apply** — all chunks are re-embedded automatically, no re-upload needed
+
+> ⚠️ Mixing models causes a vector dimension mismatch (e.g. 384 vs 1536 dims). HomeRAG detects this and returns a clear error with instructions.
+
+---
+
+## 🔌 API
+
+Authentication: `Authorization: Bearer <token>` (extension) or session cookie (web UI).
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `GET` | `/api/health` | Health check |
+| `GET` | `/api/setup/status` | Check if setup is complete |
+| `POST` | `/api/setup` | First-time setup |
+| `POST` | `/api/auth/login` | Login → session cookie |
+| `POST` | `/api/auth/logout` | Logout |
+| `GET` | `/api/auth/me` | Current user |
+| `GET` | `/api/collections` | List collections |
+| `POST` | `/api/collections` | Create collection |
+| `POST` | `/api/collections/{name}/reembed` | Re-embed collection *(SSE stream)* |
+| `GET` | `/api/files` | List files in collection |
+| `DELETE` | `/api/files/{id}` | Delete file + vectors |
+| `POST` | `/api/upload` | Upload file *(SSE stream)* |
+| `POST` | `/api/upload/url` | Ingest web URL |
+| `POST` | `/api/query` | Query knowledge base |
+| `GET` | `/api/config` | Get config |
+| `PUT` | `/api/config` | Update config |
+
+Interactive docs: **http://localhost:8000/docs**
+
+---
+
+## 💻 Local Development
+
+### Backend
 
 ```bash
-# Frontend
-cd frontend
-npm run build
-
-# Backend (if needed)
 cd backend
-# Build Docker image or deploy as needed
+python -m venv venv && source venv/bin/activate
+pip install -r requirements.txt
+
+# Qdrant
+docker run -d -p 6333:6333 qdrant/qdrant
+
+export QDRANT_HOST=localhost
+export QDRANT_PORT=6333
+export DB_PATH=./data/homerag.db
+export STORAGE_PATH=./storage
+export HOMERAG_CONFIG=./homerag_config.json
+
+uvicorn app.main:app --reload
 ```
 
-## Contributing
+### Frontend
 
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Submit a pull request
+```bash
+cd frontend
+npm install
+npm run dev   # :5173, proxies /api → :8000
+```
 
-## License
+### Extension
 
-[Add your license here]
-
-## Support
-
-For issues and questions, please open an issue on the GitHub repository.
+Load unpacked from `extension/` in `chrome://extensions/`. Reload after any JS change.
