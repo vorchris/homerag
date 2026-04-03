@@ -9,18 +9,18 @@ const DEFAULT_SETTINGS = {
   apiToken: '',
 }
 
-async function checkHealth(apiUrl) {
-  try {
-    const res = await fetch(`${apiUrl}/api/health`)
-    return res.ok
-  } catch { return false }
+function sendMsg(type, payload = {}) {
+  return new Promise(r => chrome.runtime.sendMessage({ type, ...payload }, r))
 }
 
-async function loadCollections(apiUrl) {
-  try {
-    const res = await fetch(`${apiUrl}/api/collections`)
-    return await res.json()
-  } catch { return [] }
+async function checkHealth() {
+  const res = await sendMsg('CHECK_HEALTH')
+  return res?.ok ?? false
+}
+
+async function loadCollections() {
+  const res = await sendMsg('GET_COLLECTIONS')
+  return res?.collections ?? []
 }
 
 function showSaved(id) {
@@ -43,12 +43,12 @@ async function init() {
   })
 
   // Status
-  const online = await checkHealth(settings.apiUrl)
+  const online = await checkHealth()
   $('dot').className = `dot ${online ? 'online' : 'offline'}`
   $('status-text').textContent = online ? 'online' : 'offline'
 
   // Collections
-  const collections = await loadCollections(settings.apiUrl)
+  const collections = await loadCollections()
   const sel = $('collection')
   sel.innerHTML = '<option value="default">default</option>'
   collections.forEach(c => {

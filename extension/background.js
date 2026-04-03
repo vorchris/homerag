@@ -64,4 +64,32 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     chrome.storage.sync.get(DEFAULT_SETTINGS, sendResponse)
     return true
   }
+
+  if (msg.type === 'CHECK_HEALTH') {
+    chrome.storage.sync.get(DEFAULT_SETTINGS, async (settings) => {
+      try {
+        const res = await fetch(`${settings.apiUrl}/api/health`)
+        const data = await res.json()
+        sendResponse({ ok: res.ok, data })
+      } catch {
+        sendResponse({ ok: false })
+      }
+    })
+    return true
+  }
+
+  if (msg.type === 'GET_COLLECTIONS') {
+    chrome.storage.sync.get(DEFAULT_SETTINGS, async (settings) => {
+      try {
+        const res = await fetch(`${settings.apiUrl}/api/collections`, {
+          headers: settings.apiToken ? { Authorization: `Bearer ${settings.apiToken}` } : {},
+        })
+        const data = await res.json()
+        sendResponse({ ok: true, collections: Array.isArray(data) ? data : data.collections ?? [] })
+      } catch {
+        sendResponse({ ok: false, collections: [] })
+      }
+    })
+    return true
+  }
 })
