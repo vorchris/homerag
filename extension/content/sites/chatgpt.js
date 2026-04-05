@@ -92,6 +92,38 @@
         box-sizing: border-box;
       }
       #homerag-bar.visible { display: flex; }
+      #homerag-bar.loading { display: flex; }
+      .homerag-spinner {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 2px 0;
+      }
+      .homerag-spinner-dots {
+        display: flex;
+        gap: 4px;
+        align-items: center;
+      }
+      .homerag-spinner-dots span {
+        display: block;
+        width: 4px;
+        height: 4px;
+        border-radius: 50%;
+        background: #333;
+        animation: homerag-pulse 1.2s ease-in-out infinite;
+      }
+      .homerag-spinner-dots span:nth-child(2) { animation-delay: 0.2s; }
+      .homerag-spinner-dots span:nth-child(3) { animation-delay: 0.4s; }
+      @keyframes homerag-pulse {
+        0%, 80%, 100% { background: #333; transform: scale(1); }
+        40% { background: #00e5b0; transform: scale(1.3); }
+      }
+      .homerag-spinner-label {
+        color: #333;
+        font-size: 9px;
+        letter-spacing: 1.5px;
+        text-transform: uppercase;
+      }
       .homerag-header {
         display: flex;
         align-items: center;
@@ -176,7 +208,53 @@
         transition: color 0.1s;
       }
       .homerag-file-chip.selected .homerag-chip-score { color: #00e5b0; }
-      .homerag-context-block { display: none !important; }
+      .homerag-msg-toggle {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        margin-top: 6px;
+        margin-bottom: 0;
+        cursor: pointer;
+        background: none;
+        border: 1px solid #333;
+        border-radius: 10px;
+        padding: 2px 8px;
+        font-family: 'DM Mono', monospace;
+        font-size: 9px;
+        color: #555;
+        letter-spacing: 0.8px;
+        text-transform: uppercase;
+        transition: color 0.1s, border-color 0.1s;
+      }
+      .homerag-msg-toggle:hover { color: #aaa; border-color: #555; }
+      .homerag-msg-toggle-dot {
+        width: 5px; height: 5px;
+        border-radius: 50%;
+        background: #444;
+        flex-shrink: 0;
+        transition: background 0.1s;
+      }
+      .homerag-msg-toggle:hover .homerag-msg-toggle-dot,
+      .homerag-msg-toggle.open .homerag-msg-toggle-dot { background: #00e5b0; }
+      .homerag-msg-toggle.open { color: #00e5b0; border-color: rgba(0,229,176,0.3); }
+      .homerag-context-preview {
+        display: none;
+        margin-top: 6px;
+        margin-bottom: 0;
+        padding: 8px 10px;
+        border-left: 2px solid #2a2a2a;
+        background: #0d0d0d;
+        border-radius: 4px;
+        color: #666;
+        font-size: 10px;
+        font-family: 'DM Mono', monospace;
+        white-space: pre-wrap;
+        word-break: break-word;
+        max-height: 160px;
+        overflow-y: auto;
+        line-height: 1.5;
+      }
+      .homerag-context-preview.open { display: block; }
     `
     document.head.appendChild(style)
   }
@@ -268,6 +346,22 @@
     })
   }
 
+  function renderLoading() {
+    ensureBar()
+    barEl.classList.add('visible', 'loading')
+    barEl.innerHTML = `
+      <div class="homerag-spinner">
+        <div class="homerag-spinner-dots">
+          <span></span><span></span><span></span>
+        </div>
+        <span class="homerag-spinner-label">searching</span>
+      </div>
+    `
+    requestAnimationFrame(() => {
+      if (spacerEl && barEl) spacerEl.style.height = barEl.offsetHeight + 'px'
+    })
+  }
+
 function hideContextInMessages() {
   document.querySelectorAll('[data-message-author-role="user"]').forEach(msg => {
     if (msg.dataset.homeragCleaned) return
@@ -312,10 +406,32 @@ function hideContextInMessages() {
     }
 
     if (target) {
+      const contextText = fullText.slice(fullText.indexOf('<context>') + '<context>'.length, fullText.indexOf('</context>')).trim()
+
       target.innerHTML = ''
+
+      // Question text
       const span = document.createElement('span')
       span.textContent = realQuestion
       target.appendChild(span)
+
+      // Collapsible context preview (above toggle, revealed upward)
+      const preview = document.createElement('div')
+      preview.className = 'homerag-context-preview'
+      preview.textContent = contextText
+      target.appendChild(preview)
+
+      // Toggle button — sits below the question
+      const toggle = document.createElement('button')
+      toggle.className = 'homerag-msg-toggle'
+      toggle.innerHTML = '<span class="homerag-msg-toggle-dot"></span>context'
+      target.appendChild(toggle)
+
+      toggle.addEventListener('click', () => {
+        const open = preview.classList.toggle('open')
+        toggle.classList.toggle('open', open)
+        toggle.innerHTML = `<span class="homerag-msg-toggle-dot"></span>${open ? 'hide context' : 'context'}`
+      })
     }
   })
 }
@@ -337,7 +453,7 @@ function hideContextInMessages() {
       }
       if (query === lastQuery) return
       lastQuery = query
-
+      renderLoading()
       const chunks = await fetchSuggestions(query)
       suggestions = chunks
       selected = new Set(groupByFile(chunks).map((_, i) => i))

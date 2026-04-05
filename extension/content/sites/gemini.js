@@ -186,6 +186,38 @@
         box-sizing: border-box;
       }
       #homerag-bar.visible { display: flex; }
+      #homerag-bar.loading { display: flex; }
+      .homerag-spinner {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 2px 0;
+      }
+      .homerag-spinner-dots {
+        display: flex;
+        gap: 4px;
+        align-items: center;
+      }
+      .homerag-spinner-dots span {
+        display: block;
+        width: 4px;
+        height: 4px;
+        border-radius: 50%;
+        background: #333;
+        animation: homerag-pulse 1.2s ease-in-out infinite;
+      }
+      .homerag-spinner-dots span:nth-child(2) { animation-delay: 0.2s; }
+      .homerag-spinner-dots span:nth-child(3) { animation-delay: 0.4s; }
+      @keyframes homerag-pulse {
+        0%, 80%, 100% { background: #333; transform: scale(1); }
+        40% { background: #00e5b0; transform: scale(1.3); }
+      }
+      .homerag-spinner-label {
+        color: #333;
+        font-size: 9px;
+        letter-spacing: 1.5px;
+        text-transform: uppercase;
+      }
       .homerag-header {
         display: flex;
         align-items: center;
@@ -385,6 +417,22 @@
     })
   }
 
+  function renderLoading() {
+    ensureBar()
+    barEl.classList.add('visible', 'loading')
+    barEl.innerHTML = `
+      <div class="homerag-spinner">
+        <div class="homerag-spinner-dots">
+          <span></span><span></span><span></span>
+        </div>
+        <span class="homerag-spinner-label">searching</span>
+      </div>
+    `
+    requestAnimationFrame(() => {
+      if (spacerEl && barEl) spacerEl.style.height = barEl.offsetHeight + 'px'
+    })
+  }
+
   // ─── Hide context in sent messages ───────────────────────
   function hideContextInMessages() {
     const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_ELEMENT)
@@ -446,6 +494,7 @@
       }
       if (query === lastQuery) return
       lastQuery = query
+      renderLoading()
       const chunks = await fetchSuggestions(query)
       console.log('[HomeRAG gemini] query:', query, '→ chunks:', chunks.length)
       suggestions = chunks
