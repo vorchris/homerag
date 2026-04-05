@@ -73,16 +73,91 @@
 
   function setPromptText(value) {
     const el = getVisiblePromptEl()
-    if (!el) return false
-    el.focus()
+    if (!el) { console.log('[HomeRAG gemini] setPromptText: no el'); return false }
+
     if (el.tagName === 'TEXTAREA') {
+      el.focus()
       const setter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value')?.set
       setter?.call(el, value)
       el.dispatchEvent(new Event('input', { bubbles: true }))
-    } else {
-      document.execCommand('selectAll', false, null)
-      document.execCommand('insertText', false, value)
+      return true
     }
+
+    // Prefer Quill API so internal model stays in sync with DOM.
+    // Quill stores itself on .ql-container (parent of .ql-editor).
+    const container = el.closest('.ql-container') || el.parentElement
+    const quill = container?.__quill
+    if (quill) {
+      try {
+        quill.setText(value)
+        quill.setSelection(value.length, 0)
+        console.log('[HomeRAG gemini] setPromptText via Quill API:', value.slice(0, 40))
+        return true
+      } catch (err) {
+        console.warn('[HomeRAG gemini] Quill API failed, falling back to execCommand:', err)
+      }
+    }
+
+    // Fallback: execCommand
+    el.focus()
+    const sel = window.getSelection()
+    const range = document.createRange()
+    range.selectNodeContents(el)
+    sel.removeAllRanges()
+    sel.addRange(range)
+    document.execCommand('insertText', false, value)
+
+    try {
+      const r2 = document.createRange()
+      const last = el.lastChild
+      if (last) {
+        if (last.nodeType === Node.TEXT_NODE) { r2.setStart(last, last.length); r2.collapse(true) }
+        else { r2.setStartAfter(last); r2.collapse(true) }
+        sel.removeAllRanges()
+        sel.addRange(r2)
+      }
+    } catch (_) {}
+
+    console.log('[HomeRAG gemini] setPromptText via execCommand:', (el.textContent || '').slice(0, 40))
+    return true
+  }
+
+  // ─── Shared injection logic (used by both keydown and click) ─
+  async function injectAndSend(query, sendFn) {
+    const files = groupByFile(suggestions)
+    const selectedChunks = files.filter((_, i) => selected.has(i)).flatMap(f => f.chunks)
+    if (selectedChunks.length === 0) return false
+
+    injecting = true
+    console.log('[HomeRAG gemini] injecting', selectedChunks.length, 'chunks')
+    pendingBadge = { files: files.filter((_, i) => selected.has(i)).map(f => f.filename.split('/').pop()) }
+
+    const context = selectedChunks.map(c => c.text).join('\n---\n')
+    const fullPrompt = `<context>\n${context}\n</context>\n\n${query}`
+    setPromptText(fullPrompt)
+    await new Promise(r => setTimeout(r, 200))
+
+    // Clear state BEFORE sendFn so that any re-intercepted click/keydown events
+    // see no chunks and pass through to Gemini's native handlers
+    suggestions = []; selected.clear(); lastQuery = ''
+    injecting = false
+    renderBar()
+
+    sendFn()
+
+    // Gemini doesn't always clear the editor after a programmatic send
+    // (Quill state can be out of sync). Force-clear after a short delay.
+    setTimeout(() => {
+      const el = getVisiblePromptEl()
+      if (!el || el.tagName === 'TEXTAREA') return
+      const c = el.closest('.ql-container') || el.parentElement
+      const q = c?.__quill
+      try {
+        if (q) { q.setText('') }
+        else { el.focus(); document.execCommand('selectAll', false, null); document.execCommand('delete', false, null) }
+      } catch (_) {}
+    }, 300)
+
     return true
   }
 
@@ -203,11 +278,11 @@
 
   // ─── Bar ─────────────────────────────────────────────────
   function findComposerContainer() {
-    // After conversation: Angular marks the outer input wrapper with data-node-type
+    // After conversation: go one level ABOVE input-area so the bar sits outside the styled box
     const inputArea = document.querySelector('[data-node-type="input-area"]')
-    if (inputArea) {
-      console.log('[HomeRAG gemini] composer via data-node-type:', inputArea)
-      return inputArea
+    if (inputArea?.parentElement && inputArea.parentElement !== document.body) {
+      console.log('[HomeRAG gemini] composer via input-area parent:', inputArea.parentElement)
+      return inputArea.parentElement
     }
 
     // Initial state (no conversation yet)
@@ -386,35 +461,66 @@
 
     const promptEl = getVisiblePromptEl()
     if (!promptEl) return
-    if (document.activeElement !== promptEl && !promptEl.contains(document.activeElement)) return
+
+    // Gemini: activeElement is the ql-editor OR rich-textarea or an ancestor
+    const active = document.activeElement
+    const inEditor = active === promptEl
+      || promptEl.contains(active)
+      || active?.closest('rich-textarea') != null
+    if (!inEditor) {
+      console.log('[HomeRAG gemini] Enter ignored, activeElement:', active?.tagName, active?.className?.slice(0,40))
+      return
+    }
+
+    const query = getPromptText()
+    console.log('[HomeRAG gemini] Enter pressed, query:', query?.slice(0, 50), 'suggestions:', suggestions.length)
+    if (!query) return
+
+    const files = groupByFile(suggestions)
+    const selectedChunks = files.filter((_, i) => selected.has(i)).flatMap(f => f.chunks)
+    if (selectedChunks.length === 0) return
+
+    e.preventDefault()
+    e.stopImmediatePropagation()
+
+    await injectAndSend(query, () => {
+      const btn = getSendButton()
+      console.log('[HomeRAG gemini] send btn:', btn?.tagName, btn?.disabled)
+      if (btn && !btn.disabled) {
+        btn.click()
+      } else {
+        const activeEl = getVisiblePromptEl()
+        activeEl?.dispatchEvent(new KeyboardEvent('keydown', {
+          key: 'Enter', code: 'Enter', keyCode: 13, which: 13,
+          bubbles: true, cancelable: true,
+        }))
+      }
+    })
+  }, true)
+
+  // ─── Send button click interception ──────────────────────
+  document.addEventListener('click', async (e) => {
+    if (injecting || !isExtensionValid()) return
+
+    const btn = getSendButton()
+    if (!btn) return
+    if (btn !== e.target && !btn.contains(e.target)) return
 
     const query = getPromptText()
     if (!query) return
 
     const files = groupByFile(suggestions)
-    const selectedChunks = files
-      .filter((_, i) => selected.has(i))
-      .flatMap(f => f.chunks)
-
+    const selectedChunks = files.filter((_, i) => selected.has(i)).flatMap(f => f.chunks)
     if (selectedChunks.length === 0) return
 
     e.preventDefault()
     e.stopImmediatePropagation()
-    injecting = true
+    console.log('[HomeRAG gemini] send button click intercepted, chunks:', selectedChunks.length)
 
-    pendingBadge = { files: files.filter((_, i) => selected.has(i)).map(f => f.filename.split('/').pop()) }
-
-    const context = selectedChunks.map(c => c.text).join('\n---\n')
-    const fullPrompt = `<context>\n${context}\n</context>\n\n${query}`
-    setPromptText(fullPrompt)
-    await new Promise(r => setTimeout(r, 150))
-
-    const btn = getSendButton()
-    if (btn && !btn.disabled) btn.click()
-
-    suggestions = []; selected.clear(); lastQuery = ''
-    renderBar()
-    setTimeout(() => { injecting = false }, 300)
+    await injectAndSend(query, () => {
+      const freshBtn = getSendButton()
+      if (freshBtn && !freshBtn.disabled) freshBtn.click()
+    })
   }, true)
 
   // ─── Debug on load ───────────────────────────────────────

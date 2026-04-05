@@ -373,6 +373,43 @@
     }, 500)
   }, true)
 
+  // ─── Send button click interception ──────────────────────
+  document.addEventListener('click', async (e) => {
+    if (injecting || !isExtensionValid()) return
+
+    const btn = getSendButton()
+    if (!btn) return
+    if (btn !== e.target && !btn.contains(e.target)) return
+
+    const query = getPromptText()
+    if (!query) return
+
+    const files = groupByFile(suggestions)
+    const selectedChunks = files
+      .filter((_, i) => selected.has(i))
+      .flatMap(f => f.chunks)
+    if (selectedChunks.length === 0) return
+
+    e.preventDefault()
+    e.stopImmediatePropagation()
+    injecting = true
+    console.log('[HomeRAG claude] send button click intercepted, chunks:', selectedChunks.length)
+
+    pendingBadge = { files: files.filter((_, i) => selected.has(i)).map(f => f.filename.split('/').pop()) }
+
+    const context = selectedChunks.map(c => c.text).join('\n---\n')
+    const fullPrompt = `<context>\n${context}\n</context>\n\n${query}`
+    setPromptText(fullPrompt)
+    await new Promise(r => setTimeout(r, 120))
+
+    const freshBtn = getSendButton()
+    if (freshBtn && !freshBtn.disabled) freshBtn.click()
+
+    suggestions = []; selected.clear(); lastQuery = ''
+    renderBar()
+    setTimeout(() => { injecting = false }, 300)
+  }, true)
+
   // ─── Submit ──────────────────────────────────────────────
   document.addEventListener('keydown', async (e) => {
     if (injecting || !isExtensionValid()) return
