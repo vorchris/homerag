@@ -153,4 +153,5 @@ data/
 storage/
 
 # Build
-frontend/dist/
+frontend/dist/claude.html
+gemini.html
