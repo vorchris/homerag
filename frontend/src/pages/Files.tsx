@@ -119,11 +119,11 @@ export default function Files() {
           <>
             drop file here or click to upload
             <br />
-            <span style={{ fontSize: 11, opacity: 0.5 }}>pdf · txt · md · docx</span>
+            <span style={{ fontSize: 11, opacity: 0.5 }}>pdf · txt · md · csv · code · config · …</span>
           </>
         )}
         <input ref={inputRef} type="file" style={{ display: 'none' }}
-          accept=".pdf,.txt,.md,.docx"
+          accept=".pdf,.txt,.md,.csv,.rst,.tex,.py,.js,.ts,.jsx,.tsx,.cpp,.cc,.cxx,.c,.h,.hpp,.java,.cs,.go,.rs,.rb,.php,.swift,.kt,.scala,.lua,.r,.sql,.sh,.bash,.zsh,.ps1,.json,.yaml,.yml,.toml,.ini,.conf,.env,.xml,.html,.htm,.css,.scss,.log"
           onChange={e => { const f = e.target.files?.[0]; if (f) upload(f) }} />
       </div>
 

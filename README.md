@@ -18,23 +18,64 @@ Upload documents, organize them in collections, and let the browser extension au
 
 ---
 
-## ⚡ Quick Start
+## ⚡ Install
+
+### One-liner
+
+```bash
+git clone <repository-url> && cd homerag && ./install.sh
+```
+
+The script will:
+1. Check that Docker and Docker Compose are installed
+2. Create a `.env` file if one doesn't exist
+3. Build and start all containers
+4. Add `homerag.local` to `/etc/hosts` (requires sudo once)
+
+### Manual
 
 ```bash
 git clone <repository-url>
 cd homerag
+
+# Optional: add API key for OpenAI embeddings
+cp .env.example .env   # then edit .env
+
 docker compose up --build -d
+
+# Add local hostname (optional, requires sudo)
+echo "127.0.0.1 homerag.local" | sudo tee -a /etc/hosts
 ```
 
-Then open **http://localhost:3000** — the setup wizard walks you through the initial configuration.
+### Services
 
 | Service | URL |
 |---------|-----|
-| Web interface | http://localhost:3000 |
+| Web UI | http://homerag.local · http://localhost:3000 |
 | Backend API | http://localhost:8000 |
+| API docs | http://localhost:8000/docs |
 | Qdrant dashboard | http://localhost:6333/dashboard |
 
-> Config is stored in the `db_data` Docker volume and survives container restarts.
+Open the web UI — the setup wizard walks you through initial configuration (username, password, embedding model).
+
+> Config and data are stored in Docker volumes and survive container restarts.
+
+### Browser Extension
+
+1. Go to `chrome://extensions/`
+2. Enable **Developer mode** (top right)
+3. Click **Load unpacked** → select the `extension/` folder
+4. Open the extension popup → set API URL to `http://homerag.local` (or `http://localhost:8000`) and paste your API token from the web UI settings
+
+### Supported File Types
+
+Upload any text-based file:
+
+| Category | Extensions |
+|----------|-----------|
+| Documents | `.pdf` `.txt` `.md` `.csv` `.rst` `.tex` |
+| Code | `.py` `.js` `.ts` `.tsx` `.cpp` `.c` `.h` `.java` `.cs` `.go` `.rs` `.rb` `.php` `.swift` `.kt` `.sql` `.sh` … |
+| Config | `.json` `.yaml` `.toml` `.ini` `.env` `.xml` `.html` `.css` |
 
 ---
 
