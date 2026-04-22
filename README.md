@@ -23,7 +23,7 @@ Upload documents, organize them in collections, and let the browser extension au
 ### One-liner
 
 ```bash
-git clone <repository-url> && cd homerag && ./install.sh
+git clone https://github.com/vorchris/homerag && cd homerag && ./install.sh
 ```
 
 The script will:
