@@ -1,6 +1,6 @@
 # HomeRAG
 
-> Inject your personal knowledge base into ChatGPT, Claude, and Gemini.
+> Inject your personal knowledge base into ChatGPT.
 
 Upload documents, organize them in collections, and let the browser extension automatically pull relevant context into your prompts — without copy-pasting.
 
@@ -8,11 +8,11 @@ Upload documents, organize them in collections, and let the browser extension au
 
 ## ✦ Features
 
-- 📄 **Document ingestion** — PDF, DOCX, TXT, MD, CSV and web URLs
+- 📄 **Document ingestion** — PDF, TXT, MD, CSV, code files, config files and web URLs
 - 🗂 **Collections** — organize documents into namespaces, each with its own embedding model
 - 🧠 **Embedding providers** — local (sentence-transformers) or OpenAI
 - 🔍 **Vector search** — Qdrant for fast similarity search
-- 🧩 **Browser extension** — auto-injects context into ChatGPT, Claude, and Gemini
+- 🧩 **Browser extension** — auto-injects context into ChatGPT
 - 🖥 **Web interface** — upload, search, manage collections and settings
 - 🔐 **Auth** — session login for the UI, Bearer token for the extension
 
@@ -35,7 +35,7 @@ The script will:
 ### Manual
 
 ```bash
-git clone <repository-url>
+git clone https://github.com/vorchris/homerag
 cd homerag
 
 # Optional: add API key for OpenAI embeddings
@@ -82,21 +82,20 @@ Upload any text-based file:
 ## 🛠 Architecture
 
 ```
-browser extension
+browser extension (ChatGPT)
       │
       ▼
 frontend (React)  ──▶  nginx  ──▶  backend (FastAPI)  ──▶  Qdrant
                                          │
                                      SQLite (metadata)
                                      /app/storage (files)
-                                     homerag_config.json
 ```
 
 | Layer | Stack |
 |-------|-------|
 | Backend | Python · FastAPI · SQLAlchemy · Qdrant client |
 | Frontend | React · TypeScript · Vite · nginx |
-| Extension | Chrome Manifest V3 |
+| Extension | Chrome Manifest V3 · ChatGPT |
 | Databases | SQLite (metadata) · Qdrant (vectors) |
 
 ---
@@ -105,9 +104,9 @@ frontend (React)  ──▶  nginx  ──▶  backend (FastAPI)  ──▶  Qdr
 
 **Install:** `chrome://extensions/` → Developer mode → Load unpacked → select `extension/`
 
-The extension watches your input as you type, queries the backend for relevant chunks, and shows them as chips above the send button. On **Enter**, selected chunks are prepended to your prompt as `<context>…</context>` — invisible in the chat history.
+The extension watches your input as you type, queries the backend for relevant chunks, and shows them as chips above the send button. On **Enter** or clicking **Send**, selected chunks are prepended to your prompt as `<context>…</context>` — hidden in the chat history.
 
-**Supported:** `chatgpt.com` · `claude.ai` · `gemini.google.com`
+**Supported:** `chatgpt.com`
 
 **Popup tabs:**
 
@@ -189,3 +188,9 @@ npm run dev   # :5173, proxies /api → :8000
 ### Extension
 
 Load unpacked from `extension/` in `chrome://extensions/`. Reload after any JS change.
+
+---
+
+## 📄 License
+
+MIT — see [LICENSE](LICENSE)
