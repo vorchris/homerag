@@ -297,11 +297,12 @@
     const files = groupByFile(suggestions)
 
     if (files.length === 0) {
-      barEl.classList.remove('visible')
+      barEl.classList.remove('visible', 'loading')
       if (spacerEl) spacerEl.style.height = '0px'
       return
     }
 
+    barEl.classList.remove('loading')
     barEl.classList.add('visible')
     barEl.innerHTML = `
       <div class="homerag-header">
