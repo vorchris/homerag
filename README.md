@@ -4,6 +4,8 @@
 
 Upload documents, organize them in collections, and let the browser extension automatically pull relevant context into your prompts — without copy-pasting.
 
+![HomeRAG demo](demo.gif)
+
 ---
 
 ## ✦ Features
