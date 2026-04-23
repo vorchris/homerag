@@ -37,7 +37,7 @@ export default function Files() {
   const [selected, setSelected] = useState('default')
   const [files, setFiles] = useState<any[]>([])
   const [loading, setLoading] = useState(false)
-  const [uploadProgress, setUploadProgress] = useState<{ done: number; total: number } | null>(null)
+  const [uploadProgress, setUploadProgress] = useState<{ done: number; total: number; file?: string; fileIndex?: number; fileCount?: number } | null>(null)
   const [drag, setDrag] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
 
@@ -53,19 +53,26 @@ export default function Files() {
     getFiles(selected).then(r => setFiles(r.data)).catch(() => setFiles([]))
   }, [selected])
 
-  const upload = async (file: File) => {
+  const uploadFiles = async (toUpload: File[]) => {
+    if (!toUpload.length) return
     setLoading(true)
-    setUploadProgress({ done: 0, total: 0 })
-    try {
-      await uploadFileStream(file, selected, (done, total) => setUploadProgress({ done, total }))
-      const r = await getFiles(selected)
-      setFiles(r.data)
-    } catch (e: any) {
-      alert(e instanceof Error ? e.message : 'Upload fehlgeschlagen')
-    } finally {
-      setLoading(false)
-      setUploadProgress(null)
+    const errors: string[] = []
+    for (let i = 0; i < toUpload.length; i++) {
+      const file = toUpload[i]
+      setUploadProgress({ done: 0, total: 0, file: file.name, fileIndex: i + 1, fileCount: toUpload.length })
+      try {
+        await uploadFileStream(file, selected, (done, total) =>
+          setUploadProgress({ done, total, file: file.name, fileIndex: i + 1, fileCount: toUpload.length })
+        )
+      } catch (e: any) {
+        errors.push(`${file.name}: ${e instanceof Error ? e.message : 'failed'}`)
+      }
     }
+    const r = await getFiles(selected)
+    setFiles(r.data)
+    setLoading(false)
+    setUploadProgress(null)
+    if (errors.length) alert(errors.join('\n'))
   }
 
   const remove = async (id: string) => {
@@ -76,8 +83,8 @@ export default function Files() {
 
   const onDrop = (e: React.DragEvent) => {
     e.preventDefault(); setDrag(false)
-    const file = e.dataTransfer.files[0]
-    if (file) upload(file)
+    const files = Array.from(e.dataTransfer.files)
+    if (files.length) uploadFiles(files)
   }
 
   return (
@@ -103,6 +110,9 @@ export default function Files() {
         {loading && uploadProgress ? (
           <>
             <div style={{ marginBottom: 10, fontSize: 12 }}>
+              {uploadProgress.fileCount && uploadProgress.fileCount > 1
+                ? `[${uploadProgress.fileIndex}/${uploadProgress.fileCount}] ${uploadProgress.file} — `
+                : ''}
               {uploadProgress.total === 0 ? 'uploading...' : `embedding ${uploadProgress.done} / ${uploadProgress.total} chunks`}
             </div>
             <div style={{ width: '100%', background: 'var(--border)', borderRadius: 4, height: 4, overflow: 'hidden' }}>
@@ -117,14 +127,14 @@ export default function Files() {
           </>
         ) : (
           <>
-            drop file here or click to upload
+            drop files here or click to upload
             <br />
-            <span style={{ fontSize: 11, opacity: 0.5 }}>pdf · txt · md · csv · code · config · …</span>
+            <span style={{ fontSize: 11, opacity: 0.5 }}>pdf · txt · md · csv · code · config · … (multiple files supported)</span>
           </>
         )}
-        <input ref={inputRef} type="file" style={{ display: 'none' }}
+        <input ref={inputRef} type="file" multiple style={{ display: 'none' }}
           accept=".pdf,.txt,.md,.csv,.rst,.tex,.py,.js,.ts,.jsx,.tsx,.cpp,.cc,.cxx,.c,.h,.hpp,.java,.cs,.go,.rs,.rb,.php,.swift,.kt,.scala,.lua,.r,.sql,.sh,.bash,.zsh,.ps1,.json,.yaml,.yml,.toml,.ini,.conf,.env,.xml,.html,.htm,.css,.scss,.log"
-          onChange={e => { const f = e.target.files?.[0]; if (f) upload(f) }} />
+          onChange={e => { const files = Array.from(e.target.files ?? []); if (files.length) uploadFiles(files) }} />
       </div>
 
       {/* Table */}
